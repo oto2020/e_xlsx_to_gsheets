@@ -24,6 +24,28 @@ class GoogleHelper {
     });
   }
 
+  // Функция для выполнения запроса с экспоненциальной задержкой
+  static async retryRequest(fn, maxAttempts = 50, delay = 1000) {
+    let attempt = 0;
+    while (attempt < maxAttempts) {
+      try {
+        return await fn();  // попытка выполнить запрос
+      } catch (error) {
+        if (error.code === 429 || error.code === 500 || error.code === 503) {
+          // Если ошибка квоты (429) или временная ошибка (500/503), ждем перед повторной попыткой
+          attempt++;
+          const waitTime = delay * Math.pow(2, attempt); // экспоненциальная задержка
+          console.log(`Ошибка запроса. Попытка ${attempt} из ${maxAttempts}. Повтор через ${waitTime} мс...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        } else {
+          // Для других типов ошибок выбрасываем исключение
+          throw error;
+        }
+      }
+    }
+    throw new Error('Максимальное количество попыток превышено');
+  }
+
   static async uploadExcelToSheet(excelFilePath, gid) {
     try {
       const workbook = xlsx.readFile(excelFilePath);
@@ -45,23 +67,25 @@ class GoogleHelper {
       await this.expandSheetRows(gid, data.length);
       await this.clearSheet(this.S_NAME);
 
-      const BATCH_SIZE = 500;
+      const BATCH_SIZE = 3000; // было 500
       for (let i = 0; i < data.length; i += BATCH_SIZE) {
         const progress = Math.min(100, Math.round((i / data.length) * 100));
         await this.updateSheetName(gid, `ftp.sales (${progress}%)`);
 
         const chunk = data.slice(i, i + BATCH_SIZE);
         const range = `${this.S_NAME}!A${i + 1}`;
-        await this.writeRange(range, chunk);
+
+        // Используем retryRequest для записи данных в Google Sheets
+        await this.retryRequest(() => this.writeRange(range, chunk));
       }
-      
+
       const timestamp = new Date().toLocaleString('ru-RU', {
         day: '2-digit',
         month: '2-digit',
         hour: '2-digit',
         minute: '2-digit',
       }).replace(',', '');
-      await this.updateSheetName(gid, timestamp);
+      await this.updateSheetName(gid, `ftp.sales (${timestamp})`);
 
       console.log(`Uploaded data from ${excelFilePath} to sheet with GID "${gid}" successfully.`);
     } catch (error) {
@@ -158,7 +182,7 @@ class GoogleHelper {
           ],
         },
       };
-      await this.gsapi.spreadsheets.batchUpdate(request);
+      await this.retryRequest(() => this.gsapi.spreadsheets.batchUpdate(request));
       console.log(`Updated sheet name to "${newName}"`);
       this.S_NAME = newName;
     } catch (error) {
