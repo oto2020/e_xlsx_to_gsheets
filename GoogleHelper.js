@@ -23,7 +23,7 @@ class GoogleHelper {
     });
   }
 
-  static async uploadExcelToSheet(excelFilePath, sheetName) {
+  static async uploadExcelToSheet(excelFilePath, gid) {
     try {
       const workbook = xlsx.readFile(excelFilePath);
       const firstSheetName = workbook.SheetNames[0];
@@ -35,24 +35,34 @@ class GoogleHelper {
         return;
       }
 
-      const sheetExists = await this.checkSheetExists(sheetName);
-      if (!sheetExists) {
-        console.log(`Sheet "${sheetName}" does not exist. Creating now...`);
-        await this.createSheet(sheetName);
+      const sheetName = await this.getSheetNameByGid(gid);
+      if (!sheetName) {
+        throw new Error(`Sheet with GID ${gid} not found.`);
       }
 
       await this.expandSheetRows(sheetName, data.length);
       await this.clearRange(sheetName);
-      
+
       const BATCH_SIZE = 500;
       for (let i = 0; i < data.length; i += BATCH_SIZE) {
         const chunk = data.slice(i, i + BATCH_SIZE);
         const range = `${sheetName}!A${i + 1}`;
         await this.writeRange(range, chunk);
       }
-      console.log(`Uploaded data from ${excelFilePath} to sheet "${sheetName}" successfully.`);
+      console.log(`Uploaded data from ${excelFilePath} to sheet with GID "${gid}" successfully.`);
     } catch (error) {
       console.error('Error uploading Excel to Google Sheet:', error);
+      throw error;
+    }
+  }
+
+  static async getSheetNameByGid(gid) {
+    try {
+      const response = await this.gsapi.spreadsheets.get({ spreadsheetId: this.S_ID });
+      const sheet = response.data.sheets.find(s => s.properties.sheetId === gid);
+      return sheet ? sheet.properties.title : null;
+    } catch (error) {
+      console.error('Error fetching sheet name by GID:', error);
       throw error;
     }
   }
@@ -86,36 +96,6 @@ class GoogleHelper {
       }
     } catch (error) {
       console.error('Error expanding sheet rows:', error);
-      throw error;
-    }
-  }
-
-  static async checkSheetExists(sheetName) {
-    try {
-      const response = await this.gsapi.spreadsheets.get({ spreadsheetId: this.S_ID });
-      return response.data.sheets.some(sheet => sheet.properties.title === sheetName);
-    } catch (error) {
-      console.error('Error checking if sheet exists:', error);
-      throw error;
-    }
-  }
-
-  static async createSheet(sheetName) {
-    try {
-      const request = {
-        spreadsheetId: this.S_ID,
-        resource: {
-          requests: [
-            {
-              addSheet: { properties: { title: sheetName } },
-            },
-          ],
-        },
-      };
-      await this.gsapi.spreadsheets.batchUpdate(request);
-      console.log(`Sheet "${sheetName}" created successfully.`);
-    } catch (error) {
-      console.error('Error creating sheet:', error);
       throw error;
     }
   }

@@ -2,13 +2,16 @@ const GoogleHelper = require('./GoogleHelper');
 
 (async () => {
   try {
+    // адрес таблицы
     const spreadsheetId = '1MyPE7R0YxgXWfwJUR1_Jp3mC1S1SBvhV0lGJHoB6UxE';
-    await GoogleHelper.init(spreadsheetId);
-
+    // файл источник
     const excelFilePath = './ftp.sales.xlsx';
-    const sheetName = 'ftp.sales';
+    // id листа GoogleSheet
+    const gid = 939693956;
 
-    await GoogleHelper.uploadExcelToSheet(excelFilePath, sheetName);
+    await GoogleHelper.init(spreadsheetId);
+    await GoogleHelper.uploadExcelToSheet(excelFilePath, gid);
+
     console.log('Excel data uploaded successfully.');
   } catch (error) {
     console.error('Error:', error);
