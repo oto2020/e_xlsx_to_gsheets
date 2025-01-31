@@ -1,6 +1,7 @@
 const { google } = require('googleapis');
 const xlsx = require('xlsx');
 const fs = require('fs');
+const path = require('path');
 
 class GoogleHelper {
   static keys = require('./Keys.json');
@@ -46,7 +47,33 @@ class GoogleHelper {
     throw new Error('Максимальное количество попыток превышено');
   }
 
-  static async uploadExcelToSheet(excelFilePath, gid) {
+
+  static findFirstFtpReport(directory, ftpReportName) {
+    try {
+        const files = fs.readdirSync(directory);
+        
+        const reportFile = files.find(file => file.startsWith(ftpReportName));
+        
+        return reportFile ? path.join(directory, reportFile) : null;
+    } catch (error) {
+        console.error('Ошибка при чтении директории:', error);
+        return null;
+    }
+  }
+
+  static deleteFileSync(filePath) {
+    try {
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            console.log('Файл удален:', filePath);
+        } else {
+            console.log('Файл не найден:', filePath);
+        }
+    } catch (error) {
+        console.error('Ошибка при удалении файла:', error);
+    }
+  }
+  static async uploadExcelToSheet(excelFilePath, gid, ftpReportName) {
     try {
       const workbook = xlsx.readFile(excelFilePath);
       const firstSheetName = workbook.SheetNames[0];
@@ -54,11 +81,14 @@ class GoogleHelper {
       const data = xlsx.utils.sheet_to_json(worksheet, { header: 1, raw: false });
 
       if (data.length === 0) {
-        console.log('Excel file is empty');
+        console.log(`Получен пустой excel-файл, начинающийся с ${ftpReportName}.`);
         return;
       }
+      this.deleteFileSync(excelFilePath);
+      // Работа с XLSX закончена!
 
-      // первый раз получаем имя листа
+      // Работа с Google Sheets
+      // первый раз получаем имя листа и сохраняем в глобальную переменную
       this.S_NAME = await this.getSheetNameByGid(gid);
       if (!this.S_NAME) {
         throw new Error(`Sheet with GID ${gid} not found.`);
@@ -70,7 +100,7 @@ class GoogleHelper {
       const BATCH_SIZE = 3000; // было 500
       for (let i = 0; i < data.length; i += BATCH_SIZE) {
         const progress = Math.min(100, Math.round((i / data.length) * 100));
-        await this.updateSheetName(gid, `ftp.sales (${progress}%)`);
+        await this.updateSheetName(gid, `${ftpReportName} (${progress}%)`);
 
         const chunk = data.slice(i, i + BATCH_SIZE);
         const range = `${this.S_NAME}!A${i + 1}`;
@@ -85,7 +115,7 @@ class GoogleHelper {
         hour: '2-digit',
         minute: '2-digit',
       }).replace(',', '');
-      await this.updateSheetName(gid, `ftp.sales (${timestamp})`);
+      await this.updateSheetName(gid, `${ftpReportName} (${timestamp})`);
 
       console.log(`Uploaded data from ${excelFilePath} to sheet with GID "${gid}" successfully.`);
     } catch (error) {
