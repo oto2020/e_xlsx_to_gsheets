@@ -40,7 +40,7 @@ class GoogleHelper {
         throw new Error(`Sheet with GID ${gid} not found.`);
       }
 
-      await this.expandSheetRows(sheetName, data.length);
+      await this.expandSheetRows(gid, data.length);
       await this.clearRange(sheetName);
 
       const BATCH_SIZE = 500;
@@ -67,13 +67,15 @@ class GoogleHelper {
     }
   }
 
-  static async expandSheetRows(sheetName, requiredRows) {
+  static async expandSheetRows(gid, requiredRows) {
     try {
+      const sheetName = await this.getSheetNameByGid(gid);
+      if (!sheetName) throw new Error(`Sheet with GID ${gid} not found.`);
+
       const response = await this.gsapi.spreadsheets.get({ spreadsheetId: this.S_ID });
-      const sheet = response.data.sheets.find(s => s.properties.title === sheetName);
-      if (!sheet) throw new Error(`Sheet ${sheetName} not found.`);
-      
+      const sheet = response.data.sheets.find(s => s.properties.sheetId === gid);
       const currentRowCount = sheet.properties.gridProperties.rowCount;
+
       if (currentRowCount < requiredRows) {
         const request = {
           spreadsheetId: this.S_ID,
@@ -106,7 +108,7 @@ class GoogleHelper {
         spreadsheetId: this.S_ID,
         range: `${sheetName}`,
       });
-      console.log(`Cleared range ${sheetName}`);
+      console.log(`Cleared range for sheet "${sheetName}"`);
     } catch (error) {
       console.error('Error clearing range:', error);
       throw error;
