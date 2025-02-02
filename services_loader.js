@@ -26,5 +26,5 @@ async function main() {
 
 // Первый запуск
 main();
-// Запуск каждые 30 секунд
-setInterval(main, 30000);
+// Запуск каждые 30 минут
+setInterval(main, 1800000);
